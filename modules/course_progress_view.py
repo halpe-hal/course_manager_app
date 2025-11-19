@@ -379,6 +379,13 @@ def show_board():
                 is_cooked = p.get("is_cooked", False)
                 is_served = p.get("is_served", False)  # ここは全部 False のはずだが念のため
 
+                # メイン枠なら、予約ごとのメイン料理名で上書き
+                display_name = item["item_name"]
+                if item["item_name"] == "メイン":
+                    main_choice = resv.get("main_choice")
+                    if main_choice:
+                        display_name = main_choice
+
                 # 商品見出し：時間(赤)＋商品名
                 st.markdown(
                     f"""
@@ -387,7 +394,7 @@ def show_board():
                             <span style="color:#d9534f; font-weight:700; margin-right:4px;">
                                 {time_str}
                             </span>
-                            <span>{item['item_name']}</span>
+                            <span>{display_name}</span>
                         </div>
                         <div style="font-size:16px; color:#6495ED; margin-left:2px; font-weight:bold;">
                             テーブル：{resv.get('table_no') or '-'}
@@ -473,7 +480,7 @@ def show_cooked_list():
     # 予約情報
     res_resv = (
         supabase.table("course_reservations")
-        .select("id, reserved_at, guest_name, guest_count, table_no")
+        .select("id, reserved_at, guest_name, guest_count, table_no, main_choice")
         .in_("id", reservation_ids)
         .execute()
     )
@@ -573,6 +580,13 @@ def show_cooked_list():
 
                 cooked_at = parse_dt(p["cooked_at"])
 
+                # メイン枠なら、予約ごとのメイン料理名で上書き
+                display_name = item["item_name"]
+                if item["item_name"] == "メイン":
+                    main_choice = resv.get("main_choice")
+                    if main_choice:
+                        display_name = main_choice
+
                 st.markdown(
                     f"""
                     <div style="margin-top:4px; margin-bottom:4px;">
@@ -580,7 +594,7 @@ def show_cooked_list():
                             <span style="color:#d9534f; font-weight:700; margin-right:4px;">
                                 {cooked_at.strftime('%H:%M')}
                             </span>
-                            <span>{item['item_name']}</span>
+                            <span>{display_name}</span>
                         </div>
                     </div>
                     """,
@@ -639,7 +653,7 @@ def show_served_list():
     # 予約情報
     res_resv = (
         supabase.table("course_reservations")
-        .select("id, reserved_at, guest_name, guest_count, table_no")
+        .select("id, reserved_at, guest_name, guest_count, table_no, main_choice")
         .in_("id", reservation_ids)
         .execute()
     )
@@ -738,6 +752,13 @@ def show_served_list():
 
                 served_at = parse_dt(p["served_at"])
 
+                # メイン枠なら、予約ごとのメイン料理名で上書き
+                display_name = item["item_name"]
+                if item["item_name"] == "メイン":
+                    main_choice = resv.get("main_choice")
+                    if main_choice:
+                        display_name = main_choice
+
                 st.markdown(
                     f"""
                     <div style="margin-top:4px; margin-bottom:4px;">
@@ -745,7 +766,7 @@ def show_served_list():
                             <span style="color:#d9534f; font-weight:700; margin-right:4px;">
                                 {served_at.strftime('%H:%M')}
                             </span>
-                            <span>{item['item_name']}</span>
+                            <span>{display_name}</span>
                         </div>
                     </div>
                     """,

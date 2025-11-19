@@ -19,6 +19,39 @@ TABLE_ORDER = {
 }
 
 
+def cleanup_old_data():
+    """
+    今日より前の日付の予約と、それに紐づく course_progress を全削除する。
+    （＝前日以前のデータは残さない運用）
+    """
+    today = date.today()
+    start_today = datetime.combine(today, time(0, 0, 0))
+
+    try:
+        # 今日より前の予約を取得
+        res = (
+            supabase.table("course_reservations")
+            .select("id, reserved_at")
+            .lt("reserved_at", start_today.isoformat())
+            .execute()
+        )
+        old_reservations = res.data or []
+        if not old_reservations:
+            return  # 消すものなし
+
+        old_ids = [r["id"] for r in old_reservations]
+
+        # 先に進行テーブルを削除（外部キー制約対策）
+        supabase.table("course_progress").delete().in_("reservation_id", old_ids).execute()
+
+        # 予約本体を削除
+        supabase.table("course_reservations").delete().in_("id", old_ids).execute()
+
+    except Exception as e:
+        st.error(f"過去データの削除に失敗しました: {e}")
+
+
+
 def parse_dt(dt_str: str):
     """Supabase の TIMESTAMP(+タイムゾーン) を安全に datetime に変換する"""
     if not dt_str:
@@ -145,6 +178,8 @@ def update_served(progress_id):
 
 
 def show_board():
+    cleanup_old_data()
+
     # ---- 自動更新 ON/OFF ----
     if "auto_refresh_board" not in st.session_state:
         st.session_state["auto_refresh_board"] = True  # デフォルトON
@@ -438,6 +473,7 @@ def show_board():
 # ===== 調理済み・配膳済み一覧 =====
 
 def show_cooked_list():
+    cleanup_old_data()
     st.subheader("調理済み一覧")
 
     if "auto_refresh_cooked" not in st.session_state:
@@ -611,6 +647,7 @@ def show_cooked_list():
 
 
 def show_served_list():
+    cleanup_old_data()
     st.subheader("配膳済み一覧")
 
     if "auto_refresh_cooked" not in st.session_state:

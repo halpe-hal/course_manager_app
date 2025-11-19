@@ -22,7 +22,7 @@ def fetch_course_items(course_id):
 
 
 def show():
-    st.subheader("コースマスタ管理")
+    st.subheader("ピザコースマスタ管理")
 
     courses = fetch_courses()
 
@@ -164,6 +164,22 @@ def show():
                         update_btn = st.form_submit_button("更新")
                         delete_btn = st.form_submit_button("削除")
 
+                    # 追加：作成場所（キッチン or ピザ）
+                    making_place_default = item.get("making_place") or "キッチン"
+                    if making_place_default == "キッチン":
+                        idx = 0
+                    elif making_place_default == "ピザ":
+                        idx = 1
+                    else:
+                        idx = 2
+                    making_place = st.radio(
+                        "作成場所",
+                        ("キッチン", "ピザ", "両方"),
+                        index=idx,
+                        key=f"making_place_{item['id']}",
+                        horizontal=True,
+                    )
+
                     # 更新処理
                     if update_btn:
                         if not item_name.strip():
@@ -173,6 +189,7 @@ def show():
                                 "item_name": item_name.strip(),
                                 "offset_minutes": int(offset_minutes),
                                 "display_order": int(display_order),
+                                "making_place": making_place,
                             }
                             try:
                                 supabase.table("course_items").update(update_data).eq("id", item["id"]).execute()
@@ -222,6 +239,14 @@ def show():
             )
             memo = st.text_input("メモ（任意）", "")
 
+            # 追加：作成場所
+            making_place_new = st.radio(
+                "作成場所",
+                ("キッチン", "ピザ", "両方"),
+                index=0,
+                horizontal=True,
+            )
+
             submitted_item = st.form_submit_button("商品を追加")
             if submitted_item:
                 if not item_name.strip():
@@ -233,6 +258,7 @@ def show():
                         "item_name": item_name.strip(),
                         "offset_minutes": int(offset_minutes),
                         "memo": memo.strip() or None,
+                        "making_place": making_place_new,
                     }
                     try:
                         supabase.table("course_items").insert(data).execute()

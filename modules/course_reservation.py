@@ -4,6 +4,7 @@ import streamlit as st
 from datetime import datetime, date, time, timedelta
 from collections import Counter
 from .supabase_client import supabase
+from typing import Optional
 
 # テーブル番号の選択肢
 TABLE_OPTIONS = [
@@ -19,6 +20,64 @@ TABLE_ORDER = {t: i for i, t in enumerate(TABLE_OPTIONS)}
 
 # 予約時間の選択肢（固定）
 TIME_OPTIONS = ["18:00", "18:30", "20:30", "21:00"]
+
+MAIN_OPTIONS = [
+    "パスタ",
+    "ピザ",
+]
+
+def parse_main_choice_to_counts(main_choice: Optional[str]):
+    """
+    'パスタ：1、ピザ：2' のような文字列を
+    {'パスタ': 1, 'ピザ': 2} に変換する。
+    """
+    counts = {name: 0 for name in MAIN_OPTIONS}
+    if not main_choice:
+        return counts
+
+    s = str(main_choice)
+    for part in s.split("、"):
+        part = part.strip()
+        if not part:
+            continue
+
+        if "：" in part:
+            label, num = part.split("：", 1)
+        elif ":" in part:
+            label, num = part.split(":", 1)
+        else:
+            continue
+
+        label = label.strip()
+        try:
+            n = int(num.strip())
+        except ValueError:
+            continue
+
+        if label in counts:
+            counts[label] = n
+
+    return counts
+
+
+def counts_to_main_choice(counts) -> Optional[str]:
+    """
+    {'パスタ': 1, 'ピザ': 2} を 'パスタ：1、ピザ：2' に戻す。
+    どれも0なら None を返す。
+    """
+    parts = [f"{name}：{cnt}" for name, cnt in counts.items() if cnt > 0]
+    return "、".join(parts) if parts else None
+
+
+def course_has_main_item(course_id: str) -> bool:
+    res = (
+        supabase.table("course_items")
+        .select("id, item_name")
+        .eq("course_id", course_id)
+        .execute()
+    )
+    rows = res.data or []
+    return any(r["item_name"] == "メイン" for r in rows)
 
 
 def fetch_courses():
@@ -101,7 +160,7 @@ def is_slot_conflicted(reserved_at: datetime, table_no: str, exclude_reservation
 
 
 
-def create_reservation_and_progress(course_id, reserved_at, guest_name, guest_count, table_no, note):
+def create_reservation_and_progress(course_id, reserved_at, guest_name, guest_count, table_no, note, main_choice=None,):
     # 1. 同じ時間・同じテーブルに予約がないか確認
     if is_slot_conflicted(reserved_at, table_no):
         return False, "この時間帯は同じテーブルに別の予約が入っているため、登録できません。"
@@ -115,6 +174,7 @@ def create_reservation_and_progress(course_id, reserved_at, guest_name, guest_co
         "table_no": table_no,               # 必須（プルダウン）
         "status": "reserved",
         "note": note or None,
+        "main_choice": main_choice, 
     }
     try:
         res = supabase.table("course_reservations").insert(reservation_data).execute()
@@ -157,7 +217,7 @@ def fetch_reservations_for_date(target_date: date):
 
     res = (
         supabase.table("course_reservations")
-        .select("id, reserved_at, guest_name, guest_count, table_no, status, note, course_id")
+        .select("id, reserved_at, guest_name, guest_count, table_no, status, note, course_id, main_choice")
         .gte("reserved_at", start_dt.isoformat())
         .lt("reserved_at", end_dt.isoformat())
         .order("reserved_at", desc=False)  # 時間でざっくりソート
@@ -177,7 +237,7 @@ def fetch_reservations_for_date(target_date: date):
 
 
 
-def update_reservation_basic(reservation_id: str, guest_name: str, guest_count: int, table_no: str, status: str, note: str, reserved_at: datetime):
+def update_reservation_basic(reservation_id: str, guest_name: str, guest_count: int, table_no: str, status: str, note: str, reserved_at: datetime, main_choice: Optional[str]):
     """
     予約の基本情報を更新（コースと日時は今回は編集対象外）。
     同じ時間×テーブルの重複チェックも行う。
@@ -192,6 +252,7 @@ def update_reservation_basic(reservation_id: str, guest_name: str, guest_count: 
         "table_no": table_no,
         "status": status,
         "note": note or None,
+        "main_choice": main_choice, 
     }
 
     try:
@@ -234,6 +295,11 @@ def show():
         with col1:
             selected_course_name = st.selectbox("コースを選択", [c["name"] for c in courses])
 
+            # ここで course を特定
+            course_for_form = next(c for c in courses if c["name"] == selected_course_name)
+            selected_course_id = course_for_form["id"]
+            has_main = course_has_main_item(selected_course_id)
+
             guest_name = st.text_input("お名前（必須）", "")
 
             guest_count = st.number_input(
@@ -261,24 +327,72 @@ def show():
 
             note = st.text_area("メモ（任意）", "")
 
+        # メイン料理の人数入力
+        main_counts = {}  # { "パスタ": 1, "ピザ": 1 } みたいな dict になる想定
+
+        if has_main:
+            st.markdown("#### メイン料理の内訳")
+
+            for name in MAIN_OPTIONS:
+                main_counts[name] = st.number_input(
+                    f"{name} の人数",
+                    min_value=0,
+                    max_value=20,  # 上限はざっくりでOK、後で合計でチェックする
+                    value=0,
+                    step=1,
+                    key=f"main_{name}",
+                )
+
+        # ここからはフォーム内だが、2つのカラムの「外側」に書く
+        # 選択されたコース名から course_id を特定
+        # course_for_form = next(c for c in courses if c["name"] == selected_course_name)
+        # selected_course_id = course_for_form["id"]
+
+        # # メイン料理プルダウン（そのコースに「メイン」アイテムがある場合のみ表示）
+        # main_choice = None
+        # if course_has_main_item(selected_course_id):
+        #     main_choice = st.selectbox(
+        #         "メイン料理",
+        #         options=MAIN_OPTIONS,
+        #         index=0,
+        #         key="reservation_main_choice",
+        #     )
+
         submitted = st.form_submit_button("予約を登録")
         if submitted:
-            # 必須チェック
             if not guest_name.strip():
                 st.warning("お名前を入力してください。")
             elif table_selected == "テーブルを選択してください":
                 st.warning("テーブル番号を選択してください。")
             else:
-                course = next(c for c in courses if c["name"] == selected_course_name)
                 reserved_at = datetime.combine(date_input_val, time_input_val)
 
+                # メインがあるコースなら、人数チェックと文字列生成
+                main_choice_str = None
+                if has_main:
+                    total_main = sum(main_counts.values())
+                    guest_count_int = int(guest_count)
+
+                    if total_main != guest_count_int:
+                        st.warning(f"メイン料理の人数合計（{total_main}名）が予約人数（{guest_count_int}名）と一致していません。")
+                        st.stop()
+
+                    # 「パスタ：1、ピザ：2」形式の文字列を作成
+                    parts = [
+                        f"{name}：{cnt}"
+                        for name, cnt in main_counts.items()
+                        if cnt > 0
+                    ]
+                    main_choice_str = "、".join(parts) if parts else None
+
                 ok, msg = create_reservation_and_progress(
-                    course_id=course["id"],
+                    course_id=course_for_form["id"],
                     reserved_at=reserved_at,
                     guest_name=guest_name.strip(),
                     guest_count=int(guest_count),
                     table_no=table_selected,
                     note=note.strip() or None,
+                    main_choice=main_choice_str,  # ← ここがポイント
                 )
 
                 if ok:
@@ -345,11 +459,16 @@ def show():
 
     for r in reservations:
         res_time = datetime.fromisoformat(r["reserved_at"])
+        main_label = ""
+        if r.get("main_choice"):
+            main_label = f" / メイン: {r['main_choice']}"
+        
         title = (
             f"{res_time.strftime('%Y-%m-%d %H:%M')} / "
             f"{(r['guest_name'] or 'お名前未入力')} 様 / "
             f"テーブル: {r['table_no'] or '-'} / "
             f"コース: {course_map.get(r['course_id'], '不明')}"
+            f"{main_label}"
         )
 
         with st.expander(title):
@@ -406,6 +525,27 @@ def show():
                         key=f"note_{r['id']}",
                     )
 
+                    # この予約のコースに「メイン」アイテムがあるかどうか
+                    has_main_for_row = course_has_main_item(r["course_id"])
+
+                    # メイン人数（編集用）
+                    main_counts_edit = None
+                    if has_main_for_row:
+                        st.markdown("メイン料理の内訳（編集）")
+
+                        # 既存の main_choice を人数dictにパース
+                        main_counts_edit = parse_main_choice_to_counts(r.get("main_choice"))
+
+                        for name in MAIN_OPTIONS:
+                            main_counts_edit[name] = st.number_input(
+                                f"{name} の人数",
+                                min_value=0,
+                                max_value=20,
+                                value=main_counts_edit.get(name, 0),
+                                step=1,
+                                key=f"edit_main_{name}_{r['id']}",
+                            )
+
                     # 予約日時は今回は編集不可（必要なら後で実装）
                     st.caption(f"予約日時（変更不可）: {res_time.strftime('%Y-%m-%d %H:%M')}")
 
@@ -422,6 +562,22 @@ def show():
                     elif not table_no_edit:
                         st.warning("テーブル番号を選択してください。")
                     else:
+                        # メイン人数のチェックと main_choice の再生成
+                        main_choice_edit = None
+                        if has_main_for_row:
+                            # main_counts_edit は上で number_input を通して更新済み
+                            total_main_edit = sum(main_counts_edit.values())
+                            guest_count_int_edit = int(guest_count_edit)
+
+                            if total_main_edit != guest_count_int_edit:
+                                st.warning(
+                                    f"メイン料理の人数合計（{total_main_edit}名）が "
+                                    f"人数（{guest_count_int_edit}名）と一致していません。"
+                                )
+                                st.stop()
+
+                            main_choice_edit = counts_to_main_choice(main_counts_edit)
+
                         ok, msg = update_reservation_basic(
                             reservation_id=r["id"],
                             guest_name=guest_name_edit.strip(),
@@ -430,12 +586,14 @@ def show():
                             status=status_edit,
                             note=note_edit.strip(),
                             reserved_at=res_time,
+                            main_choice=main_choice_edit,
                         )
                         if ok:
                             st.success(msg)
                             st.rerun()
                         else:
                             st.error(msg)
+
 
                 # 削除処理
                 if delete_btn:

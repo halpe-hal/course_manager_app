@@ -145,8 +145,6 @@ def update_served(progress_id):
 
 
 def show_board():
-    st.subheader("コース進行ボード")
-
     # ---- 自動更新 ON/OFF ----
     if "auto_refresh_board" not in st.session_state:
         st.session_state["auto_refresh_board"] = True  # デフォルトON
@@ -161,7 +159,7 @@ def show_board():
 
     if st.session_state["auto_refresh_board"]:
         # 2000ms = 2秒ごとにスクリプトを再実行（画面はほぼそのまま）
-        st_autorefresh(interval=2000, key="board_autorefresh_counter")
+        st_autorefresh(interval=5000, key="board_autorefresh_counter")
 
     col_date, col_info = st.columns([1, 1])
     with col_date:
@@ -197,56 +195,56 @@ def show_board():
     </style>
     """, unsafe_allow_html=True)
 
-    # ======================
-    # 予約件数 + 時間帯別 + コース別の集計表示
-    # ======================
+    # # ======================
+    # # 予約件数 + 時間帯別 + コース別の集計表示
+    # # ======================
 
-    # 総件数
-    total_count = len(reservations)
+    # # 総件数
+    # total_count = len(reservations)
 
-    # 時間帯ごとの件数
-    time_counter = Counter()
-    for r in reservations:
-        dt = datetime.fromisoformat(r["reserved_at"])
-        time_str = dt.strftime("%H:%M")
-        if time_str in TIME_OPTIONS:
-            time_counter[time_str] += 1
+    # # 時間帯ごとの件数
+    # time_counter = Counter()
+    # for r in reservations:
+    #     dt = datetime.fromisoformat(r["reserved_at"])
+    #     time_str = dt.strftime("%H:%M")
+    #     if time_str in TIME_OPTIONS:
+    #         time_counter[time_str] += 1
 
-    # コース情報取得（id → name）
-    res_courses = (
-        supabase.table("course_master")
-        .select("id, name")
-        .execute()
-    )
-    course_rows = res_courses.data or []
-    course_map = {c["id"]: c["name"] for c in course_rows}
+    # # コース情報取得（id → name）
+    # res_courses = (
+    #     supabase.table("course_master")
+    #     .select("id, name")
+    #     .execute()
+    # )
+    # course_rows = res_courses.data or []
+    # course_map = {c["id"]: c["name"] for c in course_rows}
 
-    # コース別件数
-    course_counter = Counter()
-    for r in reservations:
-        cid = r.get("course_id")
-        if cid:
-            course_counter[cid] += 1
+    # # コース別件数
+    # course_counter = Counter()
+    # for r in reservations:
+    #     cid = r.get("course_id")
+    #     if cid:
+    #         course_counter[cid] += 1
 
-    # 表示（予約登録画面と同じフォーマット）
-    st.markdown(
-        f"#### {target_date.strftime('%Y/%m/%d')} の予約件数：**{total_count}件**"
-    )
+    # # 表示（予約登録画面と同じフォーマット）
+    # st.markdown(
+    #     f"#### {target_date.strftime('%Y/%m/%d')} の予約件数：**{total_count}件**"
+    # )
 
-    # 時間帯別
-    time_lines = []
-    for slot in TIME_OPTIONS:  # ["18:00", "18:30", "20:30", "21:00"]
-        count = time_counter.get(slot, 0)
-        time_lines.append(f"{slot}: {count}件")
-    st.caption("時間帯別：" + " / ".join(time_lines))
+    # # 時間帯別
+    # time_lines = []
+    # for slot in TIME_OPTIONS:  # ["18:00", "18:30", "20:30", "21:00"]
+    #     count = time_counter.get(slot, 0)
+    #     time_lines.append(f"{slot}: {count}件")
+    # st.caption("時間帯別：" + " / ".join(time_lines))
 
-    # コース別
-    course_lines = []
-    for cid, cnt in course_counter.items():
-        name = course_map.get(cid, "不明なコース")
-        course_lines.append(f"{name}: {cnt}件")
-    if course_lines:
-        st.caption("コース別：" + " / ".join(course_lines))
+    # # コース別
+    # course_lines = []
+    # for cid, cnt in course_counter.items():
+    #     name = course_map.get(cid, "不明なコース")
+    #     course_lines.append(f"{name}: {cnt}件")
+    # if course_lines:
+    #     st.caption("コース別：" + " / ".join(course_lines))
 
     # ===== ここからボード表示のための progress 集計 =====
     reservation_ids = [r["id"] for r in reservations]
@@ -447,7 +445,7 @@ def show_cooked_list():
         )
 
     if st.session_state["auto_refresh_cooked"]:
-        st_autorefresh(interval=2000, key="cooked_autorefresh_counter")
+        st_autorefresh(interval=5000, key="cooked_autorefresh_counter")
 
     target_date = st.date_input("対象日（調理日）", value=date.today(), key="cooked_date")
     start_dt = datetime.combine(target_date, time(0, 0, 0))
@@ -613,7 +611,7 @@ def show_served_list():
         )
 
     if st.session_state["auto_refresh_cooked"]:
-        st_autorefresh(interval=2000, key="cooked_autorefresh_counter")
+        st_autorefresh(interval=5000, key="cooked_autorefresh_counter")
 
     target_date = st.date_input("対象日（配膳日）", value=date.today(), key="served_date")
     start_dt = datetime.combine(target_date, time(0, 0, 0))

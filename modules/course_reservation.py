@@ -5,6 +5,7 @@ from datetime import datetime, date, time, timedelta
 from collections import Counter
 from .supabase_client import supabase
 from typing import Optional
+from .time_utils import get_today_jst
 
 # テーブル番号の選択肢
 TABLE_OPTIONS = [
@@ -443,7 +444,7 @@ def show():
         with col2:
             date_input_val = st.date_input(
                 "予約日",
-                value=date.today(),
+                value=get_today_jst(),
                 key=f"reservation_date{form_key_suffix}",
             )
 
@@ -532,7 +533,7 @@ def show():
     # ======================
     st.markdown("### 予約一覧（対象日を選択）")
 
-    list_date = st.date_input("予約一覧の対象日", value=date.today(), key="list_date")
+    list_date = st.date_input("予約一覧の対象日", value=get_today_jst(), key="list_date")
     reservations = fetch_reservations_for_date(list_date)
 
     if not reservations:
